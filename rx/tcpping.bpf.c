@@ -19,165 +19,98 @@ struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 10);
 	__type(key, u64);
-	__type(value, struct netInfoRcv);
+	__type(value, struct net_test);
 	__uint(map_flags, BPF_F_NO_PREALLOC);
-} netInfo2 SEC(".maps");
+} net_test_map SEC(".maps");
 
-//tx
-// SEC("kprobe/tcp_sendmsg")
-// int BPF_KPROBE(tcp_sendmsg,struct sock *sock)
-// {
-// 	u64 pid,ts;
-
-// 	pid = bpf_get_current_pid_tgid() >> 32;
-// 	ts = bpf_ktime_get_ns();
-
-// 	struct sock_common skcommon;
-// 	skcommon = BPF_CORE_READ(sock,__sk_common);
-
-// 	struct netInfoSend net;
-// 	net.pid = pid;
-// 	net.time =ts;
-// 	net.srcIP = skcommon.skc_rcv_saddr;
-// 	net.dstIP =skcommon.skc_daddr;
-// 	net.srcPort = skcommon.skc_num; 
-// 	net.dstPort = bpf_htons(skcommon.skc_dport);
-// 	net.durationTime.dt1 = 0;
-// 	net.durationTime.dt2 = 0;
-// 	net.durationTime.dt3 = 0;
-// 	net.isdel=0;
-// 	if(net.dstPort==1234)
-// 		bpf_map_update_elem(&netInfo,&pid,&net,BPF_ANY);
-// 	return 0;
-// }
-
-// SEC("kprobe/ip_local_out")
-// int BPF_KPROBE(ip_local_out,struct sock *sk)
-// {
-// 	u64 pid;
-// 	pid = bpf_get_current_pid_tgid() >> 32;
-// 	struct netInfoSend *net = bpf_map_lookup_elem(&netInfo, &pid);
-// 	if(net!=NULL)
-// 	{
-// 		net->durationTime.dt1 = bpf_ktime_get_ns()- net->time;
-// 		net->isdel=0;
-// 	}
-// 	return 0;
-// }
-
-// SEC("kprobe/ip_finish_output")
-// int BPF_KPROBE(ip_finish_output,struct sk_buff *skb)
-// {
-// 	u64 pid;
-// 	pid = bpf_get_current_pid_tgid() >> 32;
-// 	struct netInfoSend *net = bpf_map_lookup_elem(&netInfo, &pid);
-// 	if(net!=NULL)
-// 	{
-// 		net->durationTime.dt2 = bpf_ktime_get_ns()- net->time;
-// 		net->isdel=0;
-// 	}
-// 	return 0;
-// }
-
-// SEC("kprobe/__dev_queue_xmit")
-// int BPF_KPROBE(__dev_queue_xmit,struct sk_buff *skb)
-// {
-// 	u64 pid;
-// 	pid = bpf_get_current_pid_tgid() >> 32;
-// 	struct netInfoSend *net = bpf_map_lookup_elem(&netInfo, &pid);
-// 	if(net!=NULL)
-// 	{
-// 		net->durationTime.dt3 = bpf_ktime_get_ns()- net->time;
-// 		net->isdel=1;
-// 	}
-// 	return 0;
-// }
-
-
-// struct netif_rx_args
-// {
-// 	uint64_t pad;
-// 	struct sk_buff *skb;
-// };
-// SEC("tp/net/netif_receive_skb")
-// int netif_receive_skb_hook(struct netif_rx_args *args)
-// {
-// 	u64 pid = bpf_get_current_pid_tgid() >> 32;
-// 	// u64 ts = bpf_ktime_get_ns();
-// 	// struct sock *sk = BPF_CORE_READ(skb,sk);
-// 	// struct sock_common skcommon = BPF_CORE_READ(sk,__sk_common);
-	
-// 	struct sk_buff *myskb = args->skb;
-// 	// struct sock_common skcommon = BPF_CORE_READ(myskb,sk,__sk_common);
-// 	if(myskb)
-// 	bpf_printk("pid:%ld saddr:%px  %ld\n",pid//daddr:%ld sport:%d dport:%d
-// 														,myskb
-// 														,myskb->data_len
-// 														// ,skcommon.skc_daddr
-// 														// ,skcommon.skc_num
-// 														// ,bpf_htons(skcommon.skc_dport);
-// 														);
-// 	return 0;
-// }
-
-//rx
-SEC("kretprobe/__netif_receive_skb")
-int BPF_KRETPROBE(__netif_receive_skb,struct sk_buff *skb)
+SEC("tp/net/netif_receive_skb")
+int tracepoint__netif_receive_skb(struct trace_event_raw_net_dev_xmit *args)
 {
 	u64 pid = bpf_get_current_pid_tgid() >> 32;
 	u64 ts = bpf_ktime_get_ns();
-	struct sock_common skcommon = BPF_CORE_READ(skb,sk,__sk_common);
+	struct net_test net={};
+	int ip_off = sizeof(struct iphdr);
 
-		struct netInfoRcv net;
-		net.pid = pid;
-		net.time =ts;
-		net.srcIP = skcommon.skc_rcv_saddr;
-		net.dstIP =skcommon.skc_daddr;
-		net.srcPort = skcommon.skc_num; 
-		net.dstPort = bpf_htons(skcommon.skc_dport);
-		net.durationTime.dt1 = 0;
-		net.durationTime.dt2 = 0;
-		net.durationTime.dt3 = 0;
-		net.isdel=0;
-		bpf_map_update_elem(&netInfo2,&pid,&net,BPF_ANY);
-	// bpf_printk("pid:%ld saddr:%ld daddr:%ld sport:%d dport:%d\n",pid
-	// 													,skcommon.skc_rcv_saddr
-	// 													,skcommon.skc_daddr
-	// 													,skcommon.skc_num
-	// 													,bpf_htons(skcommon.skc_dport)
-	// 													);
+	struct sk_buff *skb = (struct sk_buff *)(args->skbaddr);
+    struct iphdr *ip_data = (struct iphdr *)(BPF_CORE_READ(skb,data));
+	struct tcphdr *tcp_data =(struct tcphdr *)(BPF_CORE_READ(skb,data) + ip_off);
+
+	net.pid = pid;
+	net.srcIP = BPF_CORE_READ(ip_data,saddr);
+	net.dstIP = BPF_CORE_READ(ip_data,daddr);
+	net.srcPort = bpf_ntohs(BPF_CORE_READ(tcp_data,source));
+	net.dstPort = bpf_ntohs(BPF_CORE_READ(tcp_data,dest));	
+	bpf_map_update_elem(&net_test_map,&pid,&net,BPF_ANY);
+
 	return 0;
 }
 
-// SEC("kprobe/ip_rcv_finish")
-// int BPF_KPROBE(ip_rcv_finish,struct sk_buff *skb)
-// {
-// 	int pid = bpf_get_current_pid_tgid() >> 32;
-// 	u64 time = bpf_ktime_get_ns();
-// 	bpf_printk("[-3]ip_rcv_finish - PID:%d time:%ld\n",pid,time);
-// 	return 0;
-// }
+SEC("kprobe/ip_rcv")
+int BPF_KPROBE(tcp_v4_rcv_hook,struct sk_buff *skb)
+{
+	u64 pid = bpf_get_current_pid_tgid() >> 32;
+	u64 ts = bpf_ktime_get_ns();
+	
+	int ip_off = sizeof(struct iphdr);
 
-// SEC("kprobe/ip_local_deliver_finish")
-// int BPF_KPROBE(ip_local_deliver_finish,struct sk_buff *skb)
-// {
-// 	int pid = bpf_get_current_pid_tgid() >> 32;
-// 	u64 time = bpf_ktime_get_ns();
-// 	bpf_printk("[-2]ip_local_deliver_finish - PID:%d time:%ld\n",pid,time);
-// 	return 0;
-// }
+	struct iphdr *ip_data =(struct iphdr *)(BPF_CORE_READ(skb,data));
+	struct tcphdr *tcp_data =(struct tcphdr *)(BPF_CORE_READ(skb,data)+ip_off);
 
-// SEC("kprobe/tcp_v4_rcv")
-// int BPF_KPROBE(tcp_v4_rcv,struct sk_buff *skb)
-// {
-// 	int pid = bpf_get_current_pid_tgid() >> 32;
-// 	u64 time = bpf_ktime_get_ns();
-// 	bpf_printk("[-1]tcp_v4_rcv - PID:%d time:%ld\n",pid,time);
-// 	return 0;
-// }
+	struct net_test net={};
+	net.pid = pid;
+	net.srcIP = BPF_CORE_READ(ip_data,saddr);
+	net.dstIP = BPF_CORE_READ(ip_data,daddr);
+	net.srcPort = bpf_ntohs(BPF_CORE_READ(tcp_data,source));
+	net.dstPort = bpf_ntohs(BPF_CORE_READ(tcp_data,dest));
+	
+	bpf_map_update_elem(&net_test_map,&pid,&net,BPF_ANY);
+
+	return 0;
+}
+
+SEC("kprobe/ip_local_deliver")
+int BPF_KPROBE(ip_local_deliver_finish,struct sk_buff *skb)
+{
+	u64 pid = bpf_get_current_pid_tgid() >> 32;
+	u64 ts = bpf_ktime_get_ns();
+
+	struct sock_common skcommon = BPF_CORE_READ(skb,sk,__sk_common);
+
+	struct net_test net={};
+	net.pid = pid;
+	net.srcIP = skcommon.skc_rcv_saddr;
+	net.dstIP = skcommon.skc_daddr;
+	net.srcPort = skcommon.skc_num;
+	net.dstPort = bpf_ntohs(skcommon.skc_dport);
+	
+
+	if(net.srcPort==1234 || net.dstPort==1234)
+	bpf_map_update_elem(&net_test_map,&pid,&net,BPF_ANY);
 
 
+	return 0;
+}
 
 
+SEC("kprobe/tcp_v4_rcv")
+int BPF_KPROBE(tcp_v4_rcv_hook,struct sk_buff *skb)
+{
+	u64 pid = bpf_get_current_pid_tgid() >> 32;
+	u64 ts = bpf_ktime_get_ns();
+
+	struct sock_common skcommon = BPF_CORE_READ(skb,sk,__sk_common);
+
+	struct net_test net={};
+	net.pid = pid;
+	net.srcIP = skcommon.skc_rcv_saddr;
+	net.dstIP = skcommon.skc_daddr;
+	net.srcPort = skcommon.skc_num;
+	net.dstPort = bpf_ntohs(skcommon.skc_dport);
+	
+
+	if(net.srcPort==1234 || net.dstPort==1234)
+	bpf_map_update_elem(&net_test_map,&pid,&net,BPF_ANY);
 
 
+	return 0;
+}
