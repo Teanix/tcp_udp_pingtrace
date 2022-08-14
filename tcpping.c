@@ -7,6 +7,7 @@
 #include <bpf/bpf.h>
 #include "tcpping.skel.h"
 #include "tcpping.h"
+#include <linux/tcp.h>
 #include <arpa/inet.h>
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -59,31 +60,36 @@ int main(int argc, char **argv)
 
 	printf("===== now is begin =====\n");
 
-	/*map cat*/
-	u64 lookup_key,next_key;
-	struct netInfoData net;
-	// while(1)
-    // {
-        while(!exiting &&-1 != bpf_map_get_next_key(bpf_map__fd(skel_tcp->maps.netInfo), &lookup_key, &next_key))
-        {
-            err = bpf_map_lookup_elem(bpf_map__fd(skel_tcp->maps.netInfo), &next_key, &net);
-            if(0 == err && net.durationTime.dt3>0)// && net.srcPort==51082
-            {
-					struct in_addr src_addr,dst_addr;
-					src_addr.s_addr = net.srcIP;
-					dst_addr.s_addr = net.dstIP;
-                printf("pid:%ld sip:%s sport:%d dip:%s dport:%d time1:%ld time2:%ld time3:%ld\n",net.pid
-																								,inet_ntoa(src_addr)
-																								,net.srcPort
-																								,inet_ntoa(dst_addr)
-																								,net.dstPort
-																								,net.durationTime.dt1
-																								,net.durationTime.dt2
-																								,net.durationTime.dt3
-																								);
-            }
-			if(net.isdel)
-				bpf_map_delete_elem(bpf_map__fd(skel_tcp->maps.netInfo), &next_key);
+	struct tuple lookup_key,next_key;
+	char str[100];
+	char str1[100];
+	struct net_time_Info net_time_Info;
+
+        while(!exiting && -1 != bpf_map_get_next_key(bpf_map__fd(skel_tcp->maps.net_info_map), &lookup_key, &next_key))
+		{
+			err = bpf_map_lookup_elem(bpf_map__fd(skel_tcp->maps.net_info_map), &next_key, &net_time_Info);
+            if(0 == err &&net_time_Info.durationTime.dt7!=0)// 
+			{
+				struct in_addr saddr,daddr;
+				saddr.s_addr = net_time_Info.tuple.srcIP;
+				daddr.s_addr = net_time_Info.tuple.dstIP;
+				printf("pid:%ld s:%s sp:%d d:%s dp:%d time1:%ld time2:%ld time3:%ld time4:%ld time5:%ld time6:%ld time7:%ld\n"
+												,net_time_Info.pid
+												,inet_ntop(AF_INET,&saddr.s_addr,str,sizeof(str))
+												,net_time_Info.tuple.srcPort
+												,inet_ntop(AF_INET,&daddr.s_addr,str1,sizeof(str1))
+												,net_time_Info.tuple.dstPort
+												,net_time_Info.durationTime.dt1
+												,net_time_Info.durationTime.dt2
+												,net_time_Info.durationTime.dt3
+												,net_time_Info.durationTime.dt4
+												,net_time_Info.durationTime.dt5
+												,net_time_Info.durationTime.dt6
+												,net_time_Info.durationTime.dt7
+												);
+			}
+			if(net_time_Info.isdel)
+				bpf_map_delete_elem(bpf_map__fd(skel_tcp->maps.net_info_map), &next_key);
             lookup_key = next_key;
         }
 
