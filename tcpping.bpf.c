@@ -20,22 +20,19 @@ struct
 SEC("kprobe/tcp_sendmsg")
 int BPF_KPROBE(tcp_sendmsg_hook, struct sock *sock)
 {
-	u64 pid, ts;
+	u64 pid = bpf_get_current_pid_tgid() >> 32;
+	u64 ts = bpf_ktime_get_ns();
 
-	pid = bpf_get_current_pid_tgid() >> 32;
-	ts = bpf_ktime_get_ns();
-
-	struct sock_common skcommon;
-	skcommon = BPF_CORE_READ(sock, __sk_common);
-
+	
+	struct sock_common skcommon = BPF_CORE_READ(sock, __sk_common);
 	struct tuple tuple = {};
-	struct net_time_Info net_time_Info = {};
-
 	tuple.srcIP = skcommon.skc_rcv_saddr;
 	tuple.dstIP = skcommon.skc_daddr;
 	tuple.srcPort = skcommon.skc_num;
 	tuple.dstPort = bpf_htons(skcommon.skc_dport);
 
+	/* */
+	struct net_time_Info net_time_Info = {};
 	net_time_Info.pid = pid;
 	net_time_Info.time = ts;
 	net_time_Info.tuple.srcIP = tuple.srcIP;
@@ -53,7 +50,18 @@ int BPF_KPROBE(tcp_sendmsg_hook, struct sock *sock)
 		bpf_printk("1-sip:%ld sp:%d dip:%ld \n",tuple.dstIP,tuple.dstPort,tuple.srcIP);
 		bpf_printk("1-dp:%d \n",tuple.srcPort);
 		bpf_map_update_elem(&net_info_map, &tuple, &net_time_Info, BPF_ANY);
-	}	
+	}
+
+
+	// struct net_time_Info *net_time_Info = bpf_map_lookup_elem(&net_info_map, &tuple);
+	// if (net_time_Info != NULL)
+	// {
+	// 	bpf_printk("1-sip:%ld sp:%d dip:%ld \n",tuple.dstIP,tuple.dstPort,tuple.srcIP);
+	// 	bpf_printk("1-dp:%d \n",tuple.srcPort);
+	// 	net_time_Info->durationTime.dt1 = ts - net_time_Info->time;
+	// 	net_time_Info->time = ts;
+	// 	net_time_Info->isdel = 0;
+	// }
 		
 	return 0;
 }
@@ -265,3 +273,5 @@ int BPF_KPROBE(tcp_v4_rcv_hook,struct sk_buff *skb)
 
 	return 0;
 }
+
+

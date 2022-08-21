@@ -60,6 +60,16 @@ int main(int argc, char **argv)
 
 	printf("===== now is begin =====\n");
 
+	// struct tuple tuple_init;
+	// struct net_time_Info net_time_Info_init={};
+	// tuple_init.srcIP=16777343;
+	// tuple_init.dstIP=16777343;
+	// tuple_init.srcPort=12345;
+	// tuple_init.dstPort=1234;
+	// int res =bpf_map_update_elem(bpf_map__fd(skel_tcp->maps.net_info_map), &tuple_init, &net_time_Info_init, BPF_ANY);
+	// printf("res:%d\n",res);
+
+
 	struct tuple lookup_key,next_key;
 	char str[100];
 	char str1[100];
@@ -68,7 +78,7 @@ int main(int argc, char **argv)
         while(!exiting && -1 != bpf_map_get_next_key(bpf_map__fd(skel_tcp->maps.net_info_map), &lookup_key, &next_key))
 		{
 			err = bpf_map_lookup_elem(bpf_map__fd(skel_tcp->maps.net_info_map), &next_key, &net_time_Info);
-            if(0 == err &&net_time_Info.durationTime.dt7!=0)// 
+            if(0 == err &&net_time_Info.durationTime.dt7!=0 )// &&net_time_Info.durationTime.dt7!=0 && net_time_Info.time!=0 
 			{
 				struct in_addr saddr,daddr;
 				saddr.s_addr = net_time_Info.tuple.srcIP;
